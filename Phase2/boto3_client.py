@@ -12,16 +12,20 @@ except FileNotFoundError:
     exit(1)
 
 
-client_type = credentials['client_type']
 access_key = credentials['access_key']
 secret_key = credentials['secret_key']
-region = credentials['region']
+region = "eu-west-1"
+client_type = "s3"
+bucket_name = "zxdavebronze"
+file_path = "line_244_arrivals.json"
 
 
+s3_client = boto3.client(client_type , aws_access_key_id = access_key,  aws_secret_access_key = secret_key, region_name = region)
+cloudwatch = boto3.client('cloudwatch', aws_access_key_id = access_key, aws_secret_access_key = secret_key, region_name = region)
 
-#s3_client = boto3.client(client_type, aws_access_key_id = access_key,  aws_secret_access_key = secret_key, region_name = region)
+arrivials_file = s3_client.get_object(Bucket=bucket_name, Key=file_path)
+arrivials = json.loads(arrivials_file['Body'].read())
 
-
-#cloudwatch = boto3.client('cloudwatch')
+print(arrivials)
 
 print("S3 Client created successfully")
