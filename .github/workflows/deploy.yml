@@ -26,5 +26,5 @@ jobs:
         run: |
           aws cloudformation deploy \
             --stack-name my-stack \
-            --template-file template.yml \
+            --template-file /phase2/template.yml \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
