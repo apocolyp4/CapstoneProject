@@ -1,0 +1,393 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: S3 bucket + S3 Puller Lambda + CloudWatch Metrics Processor Lambda + Success Rate Dashboard
+
+Resources:
+
+  BronzeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: zxdavebronze
+
+  BronzeLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: bronze-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BronzeLambdaS3AndMetricsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${BronzeBucket}/*"
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+
+  # --- LAMBDA 1: FETCH TFL API & SAVE TO S3 ---
+  BronzeLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bronze-lambda
+      Handler: index.handler
+      Runtime: python3.12
+      Role: !GetAtt BronzeLambdaRole.Arn
+      Timeout: 20
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BronzeBucket 
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import urllib.request
+          import boto3
+
+          URL = "https://api.tfl.gov.uk/Line/244/Arrivals"
+          S3_BUCKET = os.environ["BUCKET_NAME"]
+          S3_KEY = "line_244_arrivals.json"
+
+          s3 = boto3.client("s3")
+
+          def handler(event, context):
+              try:
+                  req = urllib.request.Request(
+                      URL, 
+                      headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                  )
+
+                  with urllib.request.urlopen(req, timeout=10) as response:
+                      arrivals = json.loads(response.read().decode())
+
+                  s3.put_object(
+                      Bucket=S3_BUCKET,
+                      Key=S3_KEY,
+                      Body=json.dumps(arrivals, indent=4),
+                      ContentType="application/json"
+                  )
+
+                  return {
+                      "status": "ok",
+                      "uploaded_to": f"s3://{S3_BUCKET}/{S3_KEY}",
+                      "count": len(arrivals)
+                  }
+
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  raise e
+
+  # --- LAMBDA 2: PROCESS S3 JSON & PUSH CLOUDWATCH METRICS ---
+  CloudWatchMetricsLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: tfl-metrics-processor-lambda
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      Role: !GetAtt BronzeLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BronzeBucket
+          FILE_PATH: "line_244_arrivals.json"
+          CLOUDWATCH_NAMESPACE: "TfLTrainMetrics"
+          METRIC_NAME: "Delay_Minutes"
+          STATUS_200_METRIC: "Status_200"
+          STATUS_5XX_METRIC: "Status_5xx"
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import boto3
+          from datetime import datetime
+
+          def check_for_delay(journey):
+              expected_arrival = journey.get("expectedArrival") 
+              insert_time = journey.get("timing", {}).get("insert")
+              
+              if not expected_arrival or not insert_time:
+                  return 0
+
+              expected_arrival = datetime.fromisoformat(expected_arrival.replace("Z", "+00:00"))
+              insert_time = datetime.fromisoformat(insert_time.replace("Z", "+00:00"))
+              
+              time_difference = expected_arrival - insert_time
+              minutes_to_arrival = round(time_difference.total_seconds() / 60.0)
+
+              return minutes_to_arrival
+
+          def get_latest_journey_data(arrivals_data):
+              latest_arrivals_data = {}
+              
+              for journey in arrivals_data:
+                  trip_id = str(journey.get("tripId", "Unknown"))
+                  if trip_id == "Unknown":
+                      continue
+                      
+                  record_timestamp_str = journey.get("timestamp") or journey.get("timing", {}).get("sent")
+                  if not record_timestamp_str:
+                      continue
+                      
+                  record_timestamp = datetime.fromisoformat(record_timestamp_str.replace("Z", "+00:00"))
+                  
+                  if trip_id not in latest_arrivals_data:
+                       latest_arrivals_data[trip_id] = (record_timestamp, journey)
+                  else:
+                       stored_timestamp, _ = latest_arrivals_data[trip_id]
+                       if record_timestamp > stored_timestamp:
+                            latest_arrivals_data[trip_id] = (record_timestamp, journey)
+              
+              return latest_arrivals_data
+
+          def lambda_handler(event, context):
+              bucket_name = os.environ["BUCKET_NAME"]
+              file_path = os.environ["FILE_PATH"]
+              cloudwatch_namespace = os.environ["CLOUDWATCH_NAMESPACE"]
+              metric_name = os.environ["METRIC_NAME"]
+
+              status_200_metric = os.environ["STATUS_200_METRIC"]
+              status_5xx_metric = os.environ["STATUS_5XX_METRIC"]
+
+              s3_client = boto3.client("s3")
+              cloudwatch = boto3.client('cloudwatch')
+
+              try:
+                  arrivals_file = s3_client.get_object(Bucket=bucket_name, Key=file_path)
+                  arrivals_data = json.loads(arrivals_file['Body'].read())
+              except Exception as e:
+                  print(f"Error fetching raw S3 file: {e}")
+
+                  cloudwatch.put_metric_data(
+                      Namespace=cloudwatch_namespace,
+                      MetricData=[
+                          {
+                              'MetricName': status_5xx_metric,
+                              'Value': 1,
+                              'Unit': 'Count'
+                          }
+                      ]
+                  )
+
+                  return {
+                      'statusCode': 500,
+                      'body': f"Failed to retrieve data from S3: {str(e)}"
+                  }
+
+              if isinstance(arrivals_data, dict):
+                  arrivals_data = [arrivals_data]
+
+              latest_arrivals_data = get_latest_journey_data(arrivals_data)
+
+              metrics_sent = 0
+              for trip_id, (timestamp, journey) in latest_arrivals_data.items():
+                  delay_minutes = check_for_delay(journey)
+                  route = journey.get("lineName", "244")
+                  destination = journey.get("destinationName", "Unknown Destination")
+
+                  # 1. Publish global, dimension-free Status_200 metric
+                  cloudwatch.put_metric_data(
+                      Namespace=cloudwatch_namespace,
+                      MetricData=[
+                          {
+                              'MetricName': status_200_metric,
+                              'Value': 1,
+                              'Unit': 'Count'
+                          }
+                      ]
+                  )
+
+                  # 2. Publish detailed Status_200 metric with dimensions
+                  cloudwatch.put_metric_data(
+                      Namespace=cloudwatch_namespace,
+                      MetricData=[
+                          {
+                              'MetricName': status_200_metric,
+                              'Dimensions': [
+                                  {'Name': 'Route', 'Value': route},
+                                  {'Name': 'TripId', 'Value': trip_id}
+                              ],
+                              'Value': 1,
+                              'Unit': 'Count'
+                          }
+                      ]
+                  )
+
+                  # 3. CRITICAL ADDITION: Publish ArrivalCount metric for the Bar Chart!
+                  try:
+                      cloudwatch.put_metric_data(
+                          Namespace=cloudwatch_namespace,
+                          MetricData=[
+                              {
+                                  'MetricName': 'ArrivalCount',
+                                  'Dimensions': [
+                                      {'Name': 'Route', 'Value': route},
+                                      {'Name': 'Destination', 'Value': destination}
+                                  ],
+                                  'Value': 1.0,
+                                  'Unit': 'Count'
+                              }
+                          ]
+                      )
+                  except Exception as e:
+                      print(f"Error sending ArrivalCount metric: {e}")
+
+                  # 4. Publish Delay metric
+                  if delay_minutes > 0:
+                      try:
+                          cloudwatch.put_metric_data(
+                              Namespace=cloudwatch_namespace,
+                              MetricData=[
+                                  {
+                                      'MetricName': metric_name,
+                                      'Dimensions': [
+                                          {'Name': 'Route', 'Value': route},
+                                          {'Name': 'TripId', 'Value': trip_id},
+                                          {'Name': 'Destination', 'Value': destination}
+                                      ],
+                                      'Value': float(delay_minutes),
+                                      'Unit': 'None'
+                                  }
+                              ]
+                          )
+                          metrics_sent += 1
+                      except Exception as e:
+                          print(f"Error sending metric for TripId {trip_id}: {e}")
+
+              return {
+                  'statusCode': 200,
+                  'body': f"Successfully updated {metrics_sent} metrics in CloudWatch."
+              }
+
+  # --- EVENTBRIDGE SCHEDULE RULES ---
+  BronzeLambdaScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: bronze-lambda-schedule
+      Description: Run the bronze Lambda every 5 minutes
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt BronzeLambdaFunction.Arn
+          Id: BronzeLambdaTarget
+
+  MetricsProcessorScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: metrics-processor-schedule
+      Description: Run the CloudWatch Metrics Processor every 5 minutes
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CloudWatchMetricsLambdaFunction.Arn
+          Id: MetricsProcessorTarget
+
+  BronzeLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BronzeLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BronzeLambdaScheduleRule.Arn
+
+  MetricsProcessorInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CloudWatchMetricsLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MetricsProcessorScheduleRule.Arn
+
+
+  # --- CLOUDWATCH DASHBOARD (Using robust search wildcards) ---
+  TfLApiDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: TfL-API-Monitoring
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "TfLTrainMetrics", "Status_200", { "id": "m1", "visible": false, "stat": "Sum", "period": 300 } ],
+                  [ "TfLTrainMetrics", "Status_5xx", { "id": "m2", "visible": false, "stat": "Sum", "period": 300 } ],
+                  [ { "expression": "(m1 / (m1 + m2)) * 100", "label": "Success Rate", "id": "e1", "region": "${AWS::Region}" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Current API Success Rate (%)",
+                "period": 300,
+                "sparkline": true,
+                "setPeriodToTimeRange": true
+              }
+            },
+            {
+              "type": "metric",
+              "x": 6,
+              "y": 0,
+              "width": 10,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{TfLTrainMetrics, Route, Destination} MetricName=\"ArrivalCount\"', 'Sum', 300)", "id": "e2", "region": "${AWS::Region}" } ]
+                ],
+                "view": "bar",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Arrivals per Destination",
+                "period": 300,
+                "setPeriodToTimeRange": true,
+                "legend": {
+                  "position": "right"
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 16,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{TfLTrainMetrics, Route, TripId, Destination} MetricName=\"Delay_Minutes\"', 'Average', 300)", "id": "e3", "region": "${AWS::Region}" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Trend of Average Vehicle Delays",
+                "period": 300,
+                "timeRange": {
+                  "value": 3,
+                  "unit": "HOURS"
+                },
+                "yAxis": {
+                  "left": {
+                    "label": "Minutes",
+                    "showUnits": false
+                  }
+                },
+                "legend": {
+                  "position": "bottom"
+                }
+              }
+            }
+          ]
+        }

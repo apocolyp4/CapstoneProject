@@ -1,0 +1,111 @@
+Delivered-To: zxdavidcarr@gmail.com
+Received: by 2002:a05:6638:acd4:b0:5e9:56e8:3ba5 with SMTP id ls20csp337402jab;
+        Tue, 14 Jul 2026 08:04:31 -0700 (PDT)
+X-Received: by 2002:a5d:5d05:0:b0:47e:8e8a:43f5 with SMTP id ffacd0b85a97d-47f2dcc3387mr16343563f8f.20.1784041471353;
+        Tue, 14 Jul 2026 08:04:31 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1784041471; cv=none;
+        d=google.com; s=arc-20260327;
+        b=RMuMpRAj299w8FdYhRM8D8td4dogO3BKpo8Nly2IsJJfVdQwydR2g/U9pU4c3frorg
+         GL/JGYC6Cn9Bmb8Z7ML3uR+Gj5qhG7r45Ybnp/Y5bv9t+NQEkdOfY5oaaNhjz++GAdzD
+         /2YpneKY8PhIEiIioB/B4AobGhyZrHGF8WuFyK/ON1eV06yopxXmGjsRlzKKzkgYQaDk
+         GBy+WUnSqx5dFBzMnexOg6rle6tlk1tXQRLbIqP11xY4YJVFQTbvAcysxs7YTW5baGuh
+         DOtHPehGaWWK791ZkVzZK5cChy/XEm1MCfvm4KeHWF4Q0I0/HzgJ5/QDPYGT8yiqJny8
+         6vxQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=feedback-id:content-transfer-encoding:mime-version:subject
+         :message-id:to:from:date:dkim-signature:dkim-signature;
+        bh=AdjW5dwzl6uoV62lYbaBnCVML40Q+5oogWgF/5GEELA=;
+        fh=elVdwoGosL9KAwa3CVnXIqrKPU1qIuWFOD+eR3Zj3ec=;
+        b=QkT6an4GfpF+oB5QTY03aluEUIq+i7HoNqnObf1os3Yfq22T4pmk/AIgv1fQ4fh95F
+         t2iNeDruY5EK76NWxPOEt8rEZ9YMi/EAwykhQ8KsrENoTv3IWVn3wYuFnAvjcncbGjrH
+         eHtwiHhqDVWHirSqFjTcoRyHORT+hTucgN34xIhk+pHhotYDyp0AOCK8vC/hiMZO7pM2
+         mx750GnIi0IGHpu3XTl/WuZ6lYbtW8ZusoN0aFiwNIew41i/w0SeM0ruGb5r01awIdrb
+         WYCjZvYXOUYs2jUMeKzKeTkTAM0KzwpsuWnyUWa0OJaGOFXc5oPzKWxj+YZVfPM4JsM4
+         ELfQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@sns.amazonaws.com header.s=fo3eo6z6n34dyykgmgtexxvi36fubyhk header.b=IXXT8Tks;
+       dkim=pass header.i=@amazonses.com header.s=shh3fegwg5fppqsuzphvschd53n6ihuv header.b=kmJocbre;
+       spf=pass (google.com: domain of 0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com designates 54.240.3.29 as permitted sender) smtp.mailfrom=0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com;
+       dmarc=pass (p=QUARANTINE sp=NONE dis=NONE) header.from=amazonaws.com
+Return-Path: <0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com>
+Received: from a3-29.smtp-out.eu-west-1.amazonses.com (a3-29.smtp-out.eu-west-1.amazonses.com. [54.240.3.29])
+        by mx.google.com with ESMTPS id ffacd0b85a97d-47f464c8f5fsi5832143f8f.483.2026.07.14.08.04.31
+        for <zxdavidcarr@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Tue, 14 Jul 2026 08:04:31 -0700 (PDT)
+Received-SPF: pass (google.com: domain of 0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com designates 54.240.3.29 as permitted sender) client-ip=54.240.3.29;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@sns.amazonaws.com header.s=fo3eo6z6n34dyykgmgtexxvi36fubyhk header.b=IXXT8Tks;
+       dkim=pass header.i=@amazonses.com header.s=shh3fegwg5fppqsuzphvschd53n6ihuv header.b=kmJocbre;
+       spf=pass (google.com: domain of 0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com designates 54.240.3.29 as permitted sender) smtp.mailfrom=0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com;
+       dmarc=pass (p=QUARANTINE sp=NONE dis=NONE) header.from=amazonaws.com
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=fo3eo6z6n34dyykgmgtexxvi36fubyhk; d=sns.amazonaws.com;
+	t=1784041471;
+	h=Date:From:To:Message-ID:Subject:MIME-Version:Content-Type:Content-Transfer-Encoding;
+	bh=wnf0ybwdBS8QFX9VZHvNMW9HYzbgrulFqndh7KbZvDk=;
+	b=IXXT8TksaPQyxIVGhXHZ/QNmI7PkcGF0TIpsJnJrkfScjZyLFcFvB2QA7gfMHSeZ
+	G0pjzv/wuW8tpGvBuYQHJuAdgo/VSnSUD4X+dNEY/P/hZvKpMYvBggwZ7xoGd40aH3F
+	j4fOVSK9tU+1Ywm4AP690A4faikJJd8JdczG8DaEf2jfhjcOviaB9xvpyaja9z4LYM4
+	nB01wUm2kk3xZ15a3v+roydb/GqPNTm11qvGBWDxVTbijVKoxmqklb9CAcpBxzal9dh
+	U1vFMPRB3Neqt1OZTTudFvQ/saJG0FSNFuKHSfavZwn8bEbxOvhcyvimRRYMc0nH4lW
+	rqkHEfutog==
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=shh3fegwg5fppqsuzphvschd53n6ihuv; d=amazonses.com; t=1784041471;
+	h=Date:From:To:Message-ID:Subject:MIME-Version:Content-Type:Content-Transfer-Encoding:Feedback-ID;
+	bh=wnf0ybwdBS8QFX9VZHvNMW9HYzbgrulFqndh7KbZvDk=;
+	b=kmJocbreuP39z+3ZmNRzhSyxi8hSxxQSc8coaPXAQcawWmZeS/mlV/Lw+zHPmVMD
+	hsX2M/o+6Ti+q+ElmMKrBJP9TmSvMXTJHPXdE+SUzSmElUK/nj7SD92oXYAIBFYxRUg
+	IZnBXDSvYf5+ocpgmL+aDdKGFz6zUXkXl8Uh60ug=
+Date: Tue, 14 Jul 2026 15:04:30 +0000
+From: AWS Notifications <no-reply@sns.amazonaws.com>
+To: zxdavidcarr@gmail.com
+Message-ID: <0102019f61287bf9-999dddfe-3bbf-462a-8ac9-fd88613301df-000000@eu-west-1.amazonses.com>
+Subject: ALARM: "Train Delayed" in EU (Ireland)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+x-amz-sns-message-id: 238cc5b4-704a-5833-aeaf-a7642274f340
+x-amz-sns-subscription-arn: arn:aws:sns:eu-west-1:465502146125:Default_CloudWatch_Alarms_Topic:0d7bf714-d41a-4c25-b5ae-9bf80e596189
+Feedback-ID: ::1.eu-west-1./vSp1/4nFL0uvyzUM7OG0D9W0bzmUGX3tKOsSwsjcyk=:AmazonSES
+X-SES-Outgoing: 2026.07.14-54.240.3.29
+
+You are receiving this email because your Amazon CloudWatch Alarm "Train Delayed" contributor "a89f736275be5980" in the EU (Ireland) region has entered the ALARM state, because "Threshold Crossed: 1 out of the last 1 datapoints was greater than or equal to the threshold (15.0). The most recent datapoint which crossed the threshold: [19.0 (14/07/26 14:59:00)] (minimum 1 datapoint for OK -> ALARM transition)." at "Tuesday 14 July, 2026 15:04:30 UTC".
+
+View this alarm in the AWS Management Console:
+https://eu-west-1.console.aws.amazon.com/cloudwatch/home?region=eu-west-1#alarmsV2:alarm/Train%20Delayed?~(contributorAttributesFilter~(tokens~(~(propertyKey~'ContributorId~operator~'*3d~value~'a89f736275be5980))~operation~'and)~timestamp~'2026-07-14T15*3a04*3a30.874Z)
+
+Alarm Details:
+- Name:                       Train Delayed
+- Description:                
+- AWS Account:                465502146125
+- Alarm Arn:                  arn:aws:cloudwatch:eu-west-1:465502146125:alarm:Train Delayed
+
+Contributor Details:
+- Id:                         a89f736275be5980
+- State Change:               OK -> ALARM
+- Reason for State Change:    Threshold Crossed: 1 out of the last 1 datapoints was greater than or equal to the threshold (15.0). The most recent datapoint which crossed the threshold: [19.0 (14/07/26 14:59:00)] (minimum 1 datapoint for OK -> ALARM transition).
+- Timestamp:                  Tuesday 14 July, 2026 15:04:30 UTC
+
+Contributor Attributes:
+- TripId                    372217
+
+Threshold:
+- The alarm is in the ALARM state when the metric is GreaterThanOrEqualToThreshold 15.0 for at least 1 of the last 1 period(s) of 300 seconds. 
+
+Monitored Metrics:
+- MetricExpression:           SELECT MAX(Delay_Minutes) FROM SCHEMA(TfLBusMetrics, Destination,Route,TripId) GROUP BY TripId ORDER BY MAX() DESC
+- MetricLabel:                No Label
+
+State Change Actions:
+- OK: 
+- ALARM: [arn:aws:sns:eu-west-1:465502146125:Default_CloudWatch_Alarms_Topic]
+- INSUFFICIENT_DATA: 
+
+
+--
+If you wish to stop receiving notifications from this topic, please click or visit the link below to unsubscribe:
+https://sns.eu-west-1.amazonaws.com/unsubscribe.html?SubscriptionArn=arn:aws:sns:eu-west-1:465502146125:Default_CloudWatch_Alarms_Topic:0d7bf714-d41a-4c25-b5ae-9bf80e596189&Endpoint=zxdavidcarr@gmail.com
+
+Please do not reply directly to this email. If you have any questions or comments regarding this email, please contact us at https://aws.amazon.com/support
